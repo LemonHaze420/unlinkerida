@@ -329,20 +329,26 @@ int button_callback(int button_code, form_actions_t& fa)
 
 int get_module()
 {
-	static const char form[] =
-		"STARTITEM 0\n"
-		"Select Module\n\n"
-		"<Select Module:E0::30::>\n\n"
-		"<Add Module:B1:30:::>\n"
-		"\n";
+	auto modules_size = modules.size();
+	if (modules_size > 1) {
+		static const char form[] =
+			"STARTITEM 0\n"
+			"Select Module\n\n"
+			"<Select Module:E0::30::>\n\n"
+			"<Add Module:B1:30:::>\n"
+			"\n";
 
-	module_chooser_t chooser;
-	sizevec_t sel;
-	if (ask_form(form, &chooser, &sel, &button_callback) && sel.size())
-	{
-		return sel[0];
+		module_chooser_t chooser;
+		sizevec_t sel;
+		if (ask_form(form, &chooser, &sel, &button_callback) && sel.size())
+		{
+			return sel[0];
+		}
 	}
-	return -1;
+	
+	return modules_size == 1 ? 0 : -1;
+}
+
 }
 
 void add_entry(unlink_entry e)
@@ -848,6 +854,8 @@ Symbol& FindSymbol(ea_t address, bool local = true)
 	__assume(false);
 }
 
+char dirpath[MAX_PATH] = {};
+
 void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 {
 	CodeSymbols.clear();
@@ -857,7 +865,20 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 	BSSSymbols.clear();
 	qstring str = name;
 	str += ".obj";
-	char* path = ask_file(true, str.c_str(), "*.obj");
+
+	qstring fullpath = dirpath;
+#	if _WINDLL
+		fullpath += "\\";
+#	else
+		fullpath += "/";
+#	endif
+	fullpath += str;
+
+	const bool first = dirpath[0] == '\0';
+	char* path = (first ? ask_file(true, str.c_str(), "*.obj") : (char*)fullpath.c_str());
+	if (first && path) 
+		qdirname(dirpath, MAX_PATH, path);
+
 	if (path)
 	{
 		for (size_t i = 0; i < vector.size(); i++)
@@ -1799,6 +1820,8 @@ struct ahandler_unlink_export_t : public action_handler_t
 {
 	virtual int idaapi activate(action_activation_ctx_t*) override
 	{
+		dirpath[0] = '\0';
+
 		for (size_t i = 0; i < modules.size(); i++)
 		{
 			qvector<unlink_entry> module_entries;
