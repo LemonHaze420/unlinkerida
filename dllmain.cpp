@@ -345,6 +345,17 @@ int get_module()
 	return -1;
 }
 
+extern "C" __declspec(dllexport)
+void idaapi unlink_add_data_entry(ea_t ea, int module_index)
+{
+	unlink_entry e;
+	e.ea = ea;
+	e.is_extern = false;
+	e.is_local = false;
+	e.module_index = module_index;
+	auto entry = std::find_if(entries.begin(), entries.end(), [e](unlink_entry e2) {return e.ea == e2.ea && e.module_index == e2.module_index; });
+	if (entry == entries.end())
+		entries.push_back(e);
 }
 
 void add_entry(unlink_entry e)
