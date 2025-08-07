@@ -7,6 +7,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+static bool isX64 = false;
+
+#define IS_VALID_PROC() (!stricmp(c, "pe") || !stricmp(c, "pe64") || !stricmp(c, "pc"))
+#define IS_X64() (isX64)
+
 unsigned long crc_table[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
@@ -1887,11 +1892,26 @@ ssize_t idaapi idp_listener_t::on_event(ssize_t code, va_list va)
 	return 0;
 }
 
+static void set_isX64_from_loader() {
+	char c[50];
+	ssize_t i = get_loader_name(c, sizeof(c));
+	if (i != -1) {
+		// 'pe' is 32-bit, 'pe64' and 'pc' are 64-bit
+		if (!stricmp(c, "pe64") || !stricmp(c, "pc")) {
+			isX64 = true;
+		}
+		else {
+			isX64 = false;
+		}
+	}
+}
+
 idp_listener_t listener2;
 struct plugin_ctx_t : public plugmod_t, public event_listener_t
 {
 	plugin_ctx_t()
 	{
+		set_isX64_from_loader();
 		const action_desc_t actions[] =
 		{
 		  ACTION_DESC_LITERAL_PLUGMOD(UNLINK_NAME, "Unlink", &ahandler_unlink, this, NULL, NULL, -1),
@@ -1909,7 +1929,7 @@ struct plugin_ctx_t : public plugmod_t, public event_listener_t
 		hook_event_listener(HT_IDP, &listener2);
 		char c[50];
 		ssize_t i = get_loader_name(c, sizeof(c));
-		if (i != -1 && !stricmp(c, "pe"))
+		if (i != -1 && IS_VALID_PROC())
 		{
 			attach_action_to_menu("File/Produce File/Create C Header File...", UNLINK_EXPORT_NAME, SETMENU_APP);
 		}
@@ -1931,7 +1951,7 @@ ssize_t idaapi plugin_ctx_t::on_event(ssize_t code, va_list va)
 	{
 		char c[50];
 		ssize_t i = get_loader_name(c, sizeof(c));
-		if (i != -1 && !stricmp(c, "pe"))
+		if (i != -1 && IS_VALID_PROC())
 		{
 			TWidget* view = va_arg(va, TWidget*);
 			if (get_widget_type(view) == BWN_DISASM)
@@ -2031,7 +2051,7 @@ bool idaapi plugin_ctx_t::run(size_t)
 {
 	char c[50];
 	ssize_t i = get_loader_name(c, sizeof(c));
-	if (i != -1 && !stricmp(c, "pe"))
+	if (i != -1 && IS_VALID_PROC())
 	{
 		chooser.choose();
 	}
