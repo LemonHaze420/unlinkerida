@@ -897,7 +897,6 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 	char* path = (first ? ask_file(true, str.c_str(), "*.obj") : (char*)fullpath.c_str());
 	if (first && path) 
 		qdirname(dirpath, MAX_PATH, path);
-
 	if (path)
 	{
 		for (size_t i = 0; i < vector.size(); i++)
@@ -1076,7 +1075,7 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 									{
 									case o_mem:
 									case o_displ:
-										if (!is_numop(_flags, index))
+										if (!is_numop(_flags, index) && insn.ops[index].offb != 0)
 										{
 											if (IsSymbol(insn.ops[index].addr))
 											{
@@ -1084,15 +1083,38 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 												RelocationEntry r;
 												r.Rva = pos + insn.ops[index].offb;
 												r.Symbol = &fsym;
-												unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos + insn.ops[index].offb);
-												unsigned int offset = insn.ops[index].addr - fsym.Address;
-												*data = offset;
+
+												if (IS_X64() && insn.ops[index].type == o_displ && insn.ops[index].specflag1 == 1) {
+													int32_t* data = (int32_t*)(CodeSymbols[j].Data + r.Rva);
+													int64_t next_instr = k + insn_size;
+													int64_t target = insn.ops[index].addr;
+													int32_t rel = (int32_t)(target - next_instr);
+													*data = rel;
+
+													switch (insn.ops[index].offb)
+													{
+														case 2: r.Type = IMAGE_REL_AMD64_REL32_1; break;
+														case 3: r.Type = IMAGE_REL_AMD64_REL32_2; break;
+														default: r.Type = IMAGE_REL_AMD64_REL32; break;
+													}
+												}
+												else if (IS_X64()) {
+													uint64_t* data = (uint64_t*)(CodeSymbols[j].Data + r.Rva);
+													*data = insn.ops[index].addr;
+													r.Type = IMAGE_REL_AMD64_ADDR64;
+												}
+												else {
+													unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + r.Rva);
+													*data = insn.ops[index].addr - fsym.Address;
+													r.Type = RELOC_ABSOLUTE;
+												}
+
 												CodeSymbols[j].Relocations.push_back(r);
 											}
 										}
 										break;
 									case o_imm:
-										if (!is_numop(_flags, index))
+										if (!is_numop(_flags, index) && insn.ops[index].offb != 0)
 										{
 											if (IsSymbol(insn.ops[index].value))
 											{
@@ -1100,9 +1122,18 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 												RelocationEntry r;
 												r.Rva = pos + insn.ops[index].offb;
 												r.Symbol = &fsym;
-												unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos + insn.ops[index].offb);
-												unsigned int offset = insn.ops[index].value - fsym.Address;
-												*data = offset;
+
+												if (IS_X64()) {
+													uint64_t* data = (uint64_t*)(CodeSymbols[j].Data + r.Rva);
+													*data = insn.ops[index].value;
+													r.Type = IMAGE_REL_AMD64_ADDR64;
+												}
+												else {
+													unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + r.Rva);
+													*data = insn.ops[index].value - fsym.Address;
+													r.Type = RELOC_ABSOLUTE;
+												}
+
 												CodeSymbols[j].Relocations.push_back(r);
 											}
 										}
@@ -1116,10 +1147,24 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 												RelocationEntry r;
 												r.Rva = pos + insn.ops[index].offb;
 												r.Symbol = &fsym;
-												r.Type = IMAGE_REL_I386_REL32;
-												unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos + insn.ops[index].offb);
-												unsigned int offset = insn.ops[index].addr - fsym.Address;
-												*data = offset;
+												if (IS_X64()) {
+													int32_t* data = (int32_t*)(CodeSymbols[j].Data + pos + insn.ops[index].offb);
+													int64_t next_instr = k + insn_size;
+													int64_t target = insn.ops[index].addr;
+													int32_t rel = (int32_t)(target - next_instr);
+													*data = rel;
+													switch (insn.ops[index].offb)
+													{
+														case 2: r.Type = IMAGE_REL_AMD64_REL32_1; break;
+														case 3: r.Type = IMAGE_REL_AMD64_REL32_2; break;
+														default: r.Type = IMAGE_REL_AMD64_REL32; break;
+													}
+												} else {
+													unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos + insn.ops[index].offb);
+													unsigned int offset = insn.ops[index].addr - fsym.Address;
+													*data = offset;
+													r.Type = RELOC_REL32;
+												}
 												CodeSymbols[j].Relocations.push_back(r);
 											}
 										}
@@ -1129,35 +1174,67 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 							}
 							else
 							{
-								insn_size = 4;
-								unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos);
-								if (IsSymbol(*data))
-								{
-									Symbol& fsym = FindSymbol(*data);
-									RelocationEntry r;
-									r.Rva = pos;
-									r.Symbol = &fsym;
-									unsigned int offset = *data - fsym.Address;
-									*data = offset;
-									CodeSymbols[j].Relocations.push_back(r);
+								insn_size = WORD_SIZE;
+								if (IS_X64()) {
+									uint64_t* data = (uint64_t*)(CodeSymbols[j].Data + pos);
+									if (IsSymbol(*data))
+									{
+										Symbol& fsym = FindSymbol(*data);
+										RelocationEntry r;
+										r.Rva = pos;
+										r.Symbol = &fsym;
+										r.Type = IMAGE_REL_AMD64_ADDR64;
+										uint64_t addr = *data;
+										*data = addr;
+										CodeSymbols[j].Relocations.push_back(r);
+									}
+								} else {
+									unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos);
+									if (IsSymbol(*data))
+									{
+										Symbol& fsym = FindSymbol(*data);
+										RelocationEntry r;
+										r.Rva = pos;
+										r.Symbol = &fsym;
+										r.Type = RELOC_ABSOLUTE;
+										unsigned int offset = *data - fsym.Address;
+										*data = offset;
+										CodeSymbols[j].Relocations.push_back(r);
+									}
 								}
 							}
 						}
 					}
 					else
 					{
-						for (ea_t k = CodeSymbols[j].Address; k < CodeSymbols[j].Address + CodeSymbols[j].Size; k += 4)
+						for (ea_t k = CodeSymbols[j].Address; k < CodeSymbols[j].Address + CodeSymbols[j].Size; k += WORD_SIZE)
 						{
-							unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + k);
-							if (IsSymbol(*data))
-							{
-								Symbol& fsym = FindSymbol(*data);
-								RelocationEntry r;
-								r.Rva = k;
-								r.Symbol = &fsym;
-								unsigned int offset = *data - fsym.Address;
-								*data = offset;
-								CodeSymbols[j].Relocations.push_back(r);
+							if (IS_X64()) {
+								uint64_t* data = (uint64_t*)(CodeSymbols[j].Data + (k - CodeSymbols[j].Address));
+								if (IsSymbol(*data))
+								{
+									Symbol& fsym = FindSymbol(*data);
+									RelocationEntry r;
+									r.Rva = k - CodeSymbols[j].Address;
+									r.Symbol = &fsym;
+									r.Type = IMAGE_REL_AMD64_ADDR64;
+									uint64_t addr = *data;
+									*data = addr;
+									CodeSymbols[j].Relocations.push_back(r);
+								}
+							} else {
+								unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + (k - CodeSymbols[j].Address));
+								if (IsSymbol(*data))
+								{
+									Symbol& fsym = FindSymbol(*data);
+									RelocationEntry r;
+									r.Rva = k - CodeSymbols[j].Address;
+									r.Symbol = &fsym;
+									r.Type = RELOC_ABSOLUTE;
+									unsigned int offset = *data - fsym.Address;
+									*data = offset;
+									CodeSymbols[j].Relocations.push_back(r);
+								}
 							}
 						}
 					}
@@ -1173,18 +1250,34 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 		{
 			if (!RDataSymbols[j].IsExtern && is_off0(get_flags(RDataSymbols[j].Address)))
 			{
-				for (ssize_t k = 0; k < RDataSymbols[j].Size; k += 4)
+				for (ssize_t k = 0; k < RDataSymbols[j].Size; k += WORD_SIZE)
 				{
-					unsigned int* data = (unsigned int*)(RDataSymbols[j].Data + k);
-					if (IsSymbol(*data))
-					{
-						Symbol& fsym = FindSymbol(*data);
-						RelocationEntry r;
-						r.Rva = k;
-						r.Symbol = &fsym;
-						unsigned int offset = *data - fsym.Address;
-						*data = offset;
-						RDataSymbols[j].Relocations.push_back(r);
+					if (IS_X64()) {
+						uint64_t* data = (uint64_t*)(RDataSymbols[j].Data + k);
+						if (IsSymbol(*data))
+						{
+							Symbol& fsym = FindSymbol(*data);
+							RelocationEntry r;
+							r.Rva = k;
+							r.Symbol = &fsym;
+							r.Type = RELOC_ABSOLUTE;
+							uint64_t offset = *data - fsym.Address;
+							*data = offset;
+							RDataSymbols[j].Relocations.push_back(r);
+						}
+					} else {
+						unsigned int* data = (unsigned int*)(RDataSymbols[j].Data + k);
+						if (IsSymbol(*data))
+						{
+							Symbol& fsym = FindSymbol(*data);
+							RelocationEntry r;
+							r.Rva = k;
+							r.Symbol = &fsym;
+							r.Type = RELOC_ABSOLUTE;
+							unsigned int offset = *data - fsym.Address;
+							*data = offset;
+							RDataSymbols[j].Relocations.push_back(r);
+						}
 					}
 				}
 			}
@@ -1193,18 +1286,34 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 		{
 			if (!DataSymbols[j].IsExtern && is_off0(get_flags(DataSymbols[j].Address)) && DataSymbols[j].Data)
 			{
-				for (ssize_t k = 0; k < DataSymbols[j].Size; k += 4)
+				for (ssize_t k = 0; k < DataSymbols[j].Size; k += WORD_SIZE)
 				{
-					unsigned int* data = (unsigned int*)(DataSymbols[j].Data + k);
-					if (IsSymbol(*data))
-					{
-						Symbol& fsym = FindSymbol(*data);
-						RelocationEntry r;
-						r.Rva = k;
-						r.Symbol = &fsym;
-						unsigned int offset = *data - fsym.Address;
-						*data = offset;
-						DataSymbols[j].Relocations.push_back(r);
+					if (IS_X64()) {
+						uint64_t* data = (uint64_t*)(DataSymbols[j].Data + k);
+						if (IsSymbol(*data))
+						{
+							Symbol& fsym = FindSymbol(*data);
+							RelocationEntry r;
+							r.Rva = k;
+							r.Symbol = &fsym;
+							r.Type = RELOC_ABSOLUTE;
+							uint64_t offset = *data - fsym.Address;
+							*data = offset;
+							DataSymbols[j].Relocations.push_back(r);
+						}
+					} else {
+						unsigned int* data = (unsigned int*)(DataSymbols[j].Data + k);
+						if (IsSymbol(*data))
+						{
+							Symbol& fsym = FindSymbol(*data);
+							RelocationEntry r;
+							r.Rva = k;
+							r.Symbol = &fsym;
+							r.Type = RELOC_ABSOLUTE;
+							unsigned int offset = *data - fsym.Address;
+							*data = offset;
+							DataSymbols[j].Relocations.push_back(r);
+						}
 					}
 				}
 			}
@@ -1314,7 +1423,7 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 		compile->rectyp = S_COMPILE3;
 		compile->flags.iLanguage = CV_CFL_CXX;
 		compile->flags.fNoDbgInfo = 1;
-		compile->machine = (unsigned short)CV_CFL_PENTIUMIII;
+		compile->machine = IS_X64() ? CV_CFL_AMD64 : CV_CFL_PENTIUMIII;
 		compile->verFEMajor = (unsigned short)19;
 		compile->verFEMinor = (unsigned short)28;
 		compile->verFEBuild = (unsigned short)29913;
@@ -1330,7 +1439,7 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 		unsigned int CurrentFilePos = 0;
 		CurrentFilePos += sizeof(IMAGE_FILE_HEADER);
 		IMAGE_FILE_HEADER FileHeader;
-		FileHeader.Machine = IMAGE_FILE_MACHINE_I386;
+		FileHeader.Machine = IS_X64() ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_MACHINE_I386;
 		FileHeader.NumberOfSections = (WORD)sectioncount;
 		FileHeader.TimeDateStamp = (DWORD)time(NULL);
 		FileHeader.PointerToSymbolTable = 0;
