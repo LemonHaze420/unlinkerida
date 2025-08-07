@@ -329,24 +329,20 @@ int button_callback(int button_code, form_actions_t& fa)
 
 int get_module()
 {
-	auto modules_size = modules.size();
-	if (modules_size > 1) {
-		static const char form[] =
-			"STARTITEM 0\n"
-			"Select Module\n\n"
-			"<Select Module:E0::30::>\n\n"
-			"<Add Module:B1:30:::>\n"
-			"\n";
+	static const char form[] =
+		"STARTITEM 0\n"
+		"Select Module\n\n"
+		"<Select Module:E0::30::>\n\n"
+		"<Add Module:B1:30:::>\n"
+		"\n";
 
-		module_chooser_t chooser;
-		sizevec_t sel;
-		if (ask_form(form, &chooser, &sel, &button_callback) && sel.size())
-		{
-			return sel[0];
-		}
+	module_chooser_t chooser;
+	sizevec_t sel;
+	if (ask_form(form, &chooser, &sel, &button_callback) && sel.size())
+	{
+		return sel[0];
 	}
-	
-	return modules_size == 1 ? 0 : -1;
+	return -1;
 }
 
 }
