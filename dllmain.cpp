@@ -12,6 +12,13 @@ static bool isX64 = false;
 #define IS_VALID_PROC() (!stricmp(c, "pe") || !stricmp(c, "pe64") || !stricmp(c, "pc"))
 #define IS_X64() (isX64)
 
+#define WORD_SIZE		(IS_X64() ? 8 : 4)
+#define RELOC_ABSOLUTE	(IS_X64() ? IMAGE_REL_AMD64_ADDR64 : IMAGE_REL_I386_DIR32)
+#define RELOC_REL32		(IS_X64() ? IMAGE_REL_AMD64_REL32  : IMAGE_REL_I386_REL32)
+#define RELOC_REL32_1	(IS_X64() ? IMAGE_REL_AMD64_REL32_1 : IMAGE_REL_I386_REL32) // For RIP-relative with 1-byte offset
+#define RELOC_REL32_2	(IS_X64() ? IMAGE_REL_AMD64_REL32_2 : IMAGE_REL_I386_REL32) // For RIP-relative with 2-byte offset
+
+
 unsigned long crc_table[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
