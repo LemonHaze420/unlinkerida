@@ -1182,6 +1182,7 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 											}
 										}
 										break;
+
 									}
 								}
 							}
@@ -1190,28 +1191,19 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 								insn_size = WORD_SIZE;
 								if (IS_X64()) {
 									uint64_t* data = (uint64_t*)(CodeSymbols[j].Data + pos);
-									if (IsSymbol(*data))
-									{
+									if (IsSymbol(*data)) {
 										Symbol& fsym = FindSymbol(*data);
-										RelocationEntry r;
-										r.Rva = pos;
-										r.Symbol = &fsym;
-										r.Type = IMAGE_REL_AMD64_ADDR64;
-										uint64_t addr = *data;
-										*data = addr;
+										RelocationEntry r; r.Rva = pos; r.Symbol = &fsym; r.Type = reloc_type_abs_ptr();
+										write_addend(CodeSymbols[j].Data + pos, insn_size, 0);
 										CodeSymbols[j].Relocations.push_back(r);
 									}
-								} else {
-									unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + pos);
-									if (IsSymbol(*data))
-									{
+								}
+								else {
+									uint32_t* data = (uint32_t*)(CodeSymbols[j].Data + pos);
+									if (IsSymbol(*data)) {
 										Symbol& fsym = FindSymbol(*data);
-										RelocationEntry r;
-										r.Rva = pos;
-										r.Symbol = &fsym;
-										r.Type = RELOC_ABSOLUTE;
-										unsigned int offset = *data - fsym.Address;
-										*data = offset;
+										RelocationEntry r; r.Rva = pos; r.Symbol = &fsym; r.Type = IMAGE_REL_I386_DIR32;
+										write_addend(CodeSymbols[j].Data + pos, insn_size, 0);
 										CodeSymbols[j].Relocations.push_back(r);
 									}
 								}
@@ -1230,12 +1222,12 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 									RelocationEntry r;
 									r.Rva = k - CodeSymbols[j].Address;
 									r.Symbol = &fsym;
-									r.Type = IMAGE_REL_AMD64_ADDR64;
-									uint64_t addr = *data;
-									*data = addr;
+									r.Type = reloc_type_abs_ptr();
+									write_addend(CodeSymbols[j].Data + (k - CodeSymbols[j].Address), 8, 0);
 									CodeSymbols[j].Relocations.push_back(r);
 								}
-							} else {
+							}
+							else {
 								unsigned int* data = (unsigned int*)(CodeSymbols[j].Data + (k - CodeSymbols[j].Address));
 								if (IsSymbol(*data))
 								{
@@ -1273,12 +1265,12 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 							RelocationEntry r;
 							r.Rva = k;
 							r.Symbol = &fsym;
-							r.Type = RELOC_ABSOLUTE;
-							uint64_t offset = *data - fsym.Address;
-							*data = offset;
+							r.Type = reloc_type_abs_ptr();
+							write_addend(RDataSymbols[j].Data + k, IS_X64() ? 8 : 4, 0);
 							RDataSymbols[j].Relocations.push_back(r);
 						}
-					} else {
+					}
+					else {
 						unsigned int* data = (unsigned int*)(RDataSymbols[j].Data + k);
 						if (IsSymbol(*data))
 						{
@@ -1286,9 +1278,8 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 							RelocationEntry r;
 							r.Rva = k;
 							r.Symbol = &fsym;
-							r.Type = RELOC_ABSOLUTE;
-							unsigned int offset = *data - fsym.Address;
-							*data = offset;
+							r.Type = reloc_type_abs_ptr();
+							write_addend(RDataSymbols[j].Data + k, IS_X64() ? 8 : 4, 0);
 							RDataSymbols[j].Relocations.push_back(r);
 						}
 					}
@@ -1309,12 +1300,12 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 							RelocationEntry r;
 							r.Rva = k;
 							r.Symbol = &fsym;
-							r.Type = RELOC_ABSOLUTE;
-							uint64_t offset = *data - fsym.Address;
-							*data = offset;
+							r.Type = reloc_type_abs_ptr();
+							write_addend(DataSymbols[j].Data + k, IS_X64() ? 8 : 4, 0);
 							DataSymbols[j].Relocations.push_back(r);
 						}
-					} else {
+					}
+					else {
 						unsigned int* data = (unsigned int*)(DataSymbols[j].Data + k);
 						if (IsSymbol(*data))
 						{
@@ -1322,9 +1313,8 @@ void export_unlinked_module(qstring name, qvector<unlink_entry>& vector)
 							RelocationEntry r;
 							r.Rva = k;
 							r.Symbol = &fsym;
-							r.Type = RELOC_ABSOLUTE;
-							unsigned int offset = *data - fsym.Address;
-							*data = offset;
+							r.Type = reloc_type_abs_ptr();
+							write_addend(DataSymbols[j].Data + k, IS_X64() ? 8 : 4, 0);
 							DataSymbols[j].Relocations.push_back(r);
 						}
 					}
